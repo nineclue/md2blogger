@@ -14,15 +14,15 @@ class CodeHighlight extends Plugin {
     String lang = params.get("lang");
     if (lang == null)
       lang = "scala";     // defaults to Scala, change as to your favorite lang ;)
-    String content = "";
-    for (String line : lines)
-      content += line;
 
     PrettifyParser parser = new PrettifyParser();
     out.append("<pre class=\"prettyprint prettyprinted\" style>\n");
-    for (ParseResult pr : parser.parse(lang, content)) {
-      out.append("  <span class=\"" + pr.getStyleKeys().get(0) + "\">"
-        + content.substring(pr.getOffset(), pr.getOffset()+pr.getLength()) + "</span>\n");
+    for (String line : lines) {
+      for (ParseResult pr : parser.parse(lang, line)) {
+        out.append("<span class=\"" + pr.getStyleKeys().get(0) + "\">"
+          + line.substring(pr.getOffset(), pr.getOffset()+pr.getLength()) + "</span>");
+      }
+      out.append("\n");
     }
     out.append("</pre>\n");
   }
