@@ -1,8 +1,6 @@
 import org.markdown4j.{Markdown4jProcessor, Plugin}
 import io.Source._
-import java.nio.file.{Files, Paths}
-import prettify.PrettifyParser
-import syntaxhighlight.ParseResult
+import java.nio.file.Files
 
 object Md2Blogger {
   private val mdcode =

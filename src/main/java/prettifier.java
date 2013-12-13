@@ -1,10 +1,8 @@
-import org.markdown4j.Markdown4jProcessor;
 import org.markdown4j.Plugin;
 import prettify.PrettifyParser;
 import syntaxhighlight.ParseResult;
 import java.util.Map;
 import java.util.List;
-import java.util.HashMap;
 
 class CodeHighlight extends Plugin {
   public CodeHighlight() {
