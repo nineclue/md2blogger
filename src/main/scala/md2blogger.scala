@@ -15,7 +15,7 @@ object Md2Blogger {
   def splitFileName(name:String):(String, String) = {
     val dot = name.lastIndexOf('.')
     if (dot < 0) (name, "")
-    else (name.take(dot-1), name.drop(dot))
+    else (name.take(dot), name.drop(dot+1))
   }
 
   def writeToFile(fn:String, content:String):Unit = {
