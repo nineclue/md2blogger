@@ -1,3 +1,5 @@
+package nineclue.md2blogger;
+
 import org.markdown4j.Plugin;
 import prettify.PrettifyParser;
 import syntaxhighlight.ParseResult;
