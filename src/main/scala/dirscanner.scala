@@ -4,8 +4,8 @@ import java.nio.file.{Path, Paths, Files, LinkOption}
 import java.util.Date
 
 sealed abstract trait Differ
-case class Added(path:String) extends Differ
-case class Updated(path:String) extends Differ
+case class Added(md:MDInfo) extends Differ
+case class Updated(md:MDInfo) extends Differ
 
 case class MDInfo(name:String, path:String, size:Long, mDate:Date, cs:Long, exists:Option[Exists])
 
@@ -17,6 +17,7 @@ object Dir {
   type DirInfo = collection.mutable.Map[String, MDInfo]
 
   private val fileName = ".mdInfo"
+  // private var dirInfo = collection.mutable.Map.empty[String, MDInfo]
 
   // must be file, hidden or starts with '.' || '_' or extension is not ...
   implicit def defaultIgnore:Ignore =
@@ -83,7 +84,7 @@ object Dir {
   def apply(code: => Path=>Unit) = doDirJob(currentDir)(code)
 
   // 현재 디렉토리이하의 자료 Map을 반환
-  def summaryMap = {
+  def summaryMap:ScanInfo = {
     val s = collection.mutable.Map.empty[String, (String, Long, Date)]
     doDirJob(currentDir)(fileMap(s))
     s
@@ -100,11 +101,11 @@ object Dir {
   }
 
   // 자료 Map을 지정된 이름으로 저장
-  def saveToFile(name:String, m:DirInfo) = {
+  def save(m:DirInfo) = {
     import scala.pickling._
     import json._
 
-    val file = Files.newBufferedWriter(Paths.get(name), java.nio.charset.Charset.forName("UTF-8"))
+    val file = Files.newBufferedWriter(Paths.get(fileName), java.nio.charset.Charset.forName("UTF-8"))
     try
       file.write(m.pickle.value)
     finally
@@ -112,11 +113,11 @@ object Dir {
   }
 
   // 지정된 이름을 불러옴
-  def loadFromFile(name:String):DirInfo = {
+  def load:DirInfo = {
     import scala.pickling._
     import json._
 
-    val f = Paths.get(name)
+    val f = Paths.get(fileName)
     if (Files.exists(f)) {
       val jsonVal = new String(Files.readAllBytes(f))
       jsonVal.unpickle[DirInfo]
@@ -124,5 +125,27 @@ object Dir {
       collection.mutable.Map.empty[String, MDInfo]
   }
 
-  def updates(org:DirInfo, cur:ScanInfo):(List[Differ], DirInfo) = ???
+  def updates(org:DirInfo, current:ScanInfo):List[Differ] = {
+    val l = ListBuffer.empty[Differ]
+    current.foreach {
+      (fname, (fpath, size, mDate)) =>
+        if (org.contains(fname)) {
+          val oInfo = org(fname)
+          if ((oInfo.size != size) || (oInfo.mDate.compareTo(mDate) != 0)) {
+            val cs = pseudoCS(fpath)
+            val updatedMD = MDInfo(fname, fpath, size, mDate, cs, org.exists) 
+            if (cs != oInfo.cs)   // checksum is different, blogger updated needed
+              l += Updated(updatedMD)
+            else                  // same checksum, just update flie attributes
+              org.update(fname, updatedMD)
+          }
+        } else {
+          val newMD = MDInfo(fname, fpath, size, mDate, pseudoCS(fpath), None)
+          l += Added(newMD)
+          org.update(fname, newMD)
+        }
+    }
+    save(org)
+    l.toList
+  }
 }
