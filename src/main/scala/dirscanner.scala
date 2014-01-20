@@ -17,7 +17,7 @@ object Dir {
   type DirInfo = collection.mutable.Map[String, MDInfo]
 
   private val fileName = ".mdInfo"
-  // private var dirInfo = collection.mutable.Map.empty[String, MDInfo]
+  private val dirInfo = collection.mutable.Map.empty[String, MDInfo]
 
   // must be file, hidden or starts with '.' || '_' or extension is not ...
   implicit def defaultIgnore:Ignore =
@@ -65,20 +65,7 @@ object Dir {
   // Path p의 내용에 대한 checksum 계산
   def pseudoCS(p:String):Long = {
     val lines = Files.readAllLines(Paths.get(p), java.nio.charset.Charset.forName("UTF-8"))
-    lines.foldLeft(0L)((cs, l) => l.foldLeft(cs)((cs2, c) => (cs2 << 2) + c.toLong))
-  }
-
-
-  // DirInfo m에 대해 각각의 pseudochecksum 계산해 MDInfo 반환
-  // 처음 mass update시 호출하고 이후 CS는 필요한 경우에만 계산하도록 하기 위함
-  // 혹은 나중에 디렉토리를 처리하기 위함
-  def updateCS(m:ScanInfo):DirInfo = {
-    val mdMap = collection.mutable.Map.empty[String, MDInfo]
-    m.foreach {
-      case (name, (pathString, size, mTime)) =>
-        mdMap += ((name, MDInfo(name, pathString, size, mTime, pseudoCS(pathString), None)))
-    }
-    mdMap
+    lines.foldLeft(0L)((cs, l) => cs + l.hashCode.toLong)
   }
 
   def apply(code: => Path=>Unit) = doDirJob(currentDir)(code)
@@ -90,62 +77,67 @@ object Dir {
     s
   }
 
-  def printsummary = {
-    val sum = summaryMap
-    sum.values.foreach {
-      case (path, size, date) =>
-        val cs = pseudoCS(path)
-        println(s"${path.toString} ($size) : $cs")
-    }
-    // saveToFile(".mdinfo", sum)
-  }
-
   // 자료 Map을 지정된 이름으로 저장
-  def save(m:DirInfo) = {
+  def save = {
     import scala.pickling._
     import json._
 
     val file = Files.newBufferedWriter(Paths.get(fileName), java.nio.charset.Charset.forName("UTF-8"))
     try
-      file.write(m.pickle.value)
+      file.write(dirInfo.pickle.value)
     finally
       file.close
   }
 
   // 지정된 이름을 불러옴
-  def load:DirInfo = {
+  def load = {
     import scala.pickling._
     import json._
 
     val f = Paths.get(fileName)
     if (Files.exists(f)) {
       val jsonVal = new String(Files.readAllBytes(f))
-      jsonVal.unpickle[DirInfo]
-    } else
-      collection.mutable.Map.empty[String, MDInfo]
+      dirInfo ++= jsonVal.unpickle[DirInfo]
+    } else {
+      println("Directory information not exists, making a new one.")
+      summaryMap.foreach {
+        case (name, (pathString, size, mTime)) =>
+          dirInfo += ((name, MDInfo(name, pathString, size, mTime, pseudoCS(pathString), None)))
+      }
+      save
+    }
   }
 
-  def updates(org:DirInfo, current:ScanInfo):List[Differ] = {
-    val l = ListBuffer.empty[Differ]
-    current.foreach {
-      (fname, (fpath, size, mDate)) =>
-        if (org.contains(fname)) {
-          val oInfo = org(fname)
+  def updates:List[Differ] = {
+    val l = scala.collection.mutable.ListBuffer.empty[Differ]
+    summaryMap.foreach {
+      case (fname, (fpath, size, mDate)) =>
+        if (dirInfo.contains(fname)) {
+          val oInfo = dirInfo(fname)
           if ((oInfo.size != size) || (oInfo.mDate.compareTo(mDate) != 0)) {
             val cs = pseudoCS(fpath)
-            val updatedMD = MDInfo(fname, fpath, size, mDate, cs, org.exists) 
+            val updatedMD = MDInfo(fname, fpath, size, mDate, cs, dirInfo(fname).exists) 
             if (cs != oInfo.cs)   // checksum is different, blogger updated needed
               l += Updated(updatedMD)
-            else                  // same checksum, just update flie attributes
-              org.update(fname, updatedMD)
+            dirInfo.update(fname, updatedMD)
           }
         } else {
           val newMD = MDInfo(fname, fpath, size, mDate, pseudoCS(fpath), None)
           l += Added(newMD)
-          org.update(fname, newMD)
+          dirInfo.update(fname, newMD)
         }
     }
-    save(org)
+    save
     l.toList
+  }
+
+  def printUpdates(l:List[Differ]) = {
+    println(s"${l.size} updates found.")
+    l.foreach {
+      case Added(mdInfo) =>
+        println(s"New file... $mdInfo")
+      case Updated(mdInfo) =>
+        println(s"Modified file... $mdInfo")
+    }
   }
 }

@@ -17,5 +17,7 @@ object Md2Blogger {
     // Dir.printsummary
     // println(Dir.loadFromFile(".mdinfo"))
     BlogAPI.load
+    Dir.load
+    Dir.printUpdates(Dir.updates)
   }
 }
