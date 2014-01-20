@@ -5,20 +5,6 @@ import io.Source._
 import java.nio.file.Files
 
 object Md2Blogger {
-  private val mdcode =
-    new util.matching.Regex("""(?ms)^```\s*(\w{2,})\s*$(.+?)^```""", "lang", "code")
-  def markdown2html(md:String):String = {
-    val converted = mdcode.replaceAllIn(md,
-      m => """%%%code lang=$1$2%%%"""
-    )
-    new Markdown4jProcessor().registerPlugins(new CodeHighlight()).process(converted)
-  }
-
-  def writeToFile(fn:String, content:String):Unit = {
-    val pw = new java.io.PrintWriter(new java.io.File(fn))
-    try pw.write(content) finally pw.close
-  }
-
   def main(args:Array[String]) {
     /* if (args.isEmpty) throw new Exception("Missing file name")
     val (name, ext) = Dir.splitFileName(args(0))

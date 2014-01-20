@@ -17,8 +17,6 @@ object MiniParser {
 	}
 }
 
-case class Post(title:String, content:String, id:Option[String]=None, url:Option[String]=None, selfLink:Option[String]=None)
-
 object BlogAPI {
   import collection.JavaConversions.asScalaBuffer
 
@@ -33,6 +31,8 @@ object BlogAPI {
 	private val clientSecret = "client_secret"
 	private val accessToken = "access_token"
 	private val refreshToken = "refresh_token"
+
+	private def authHeader:header.Headers = header.Headers(Map("Authorization" -> ("Bearer " + bloggerData.get(accessToken).get)))
 
 	def initialize = {
 		// get client_id & secret
@@ -112,7 +112,7 @@ object BlogAPI {
 	def updateAccessToken = {
 		println("Refreshing access token.")
 		val client = new HttpClient
-		val head = header.Headers(Map("Authorization" -> ("Bearer " + bloggerData.get(refreshToken).get)))
+		// val head = header.Headers(Map("Authorization" -> ("Bearer " + bloggerData.get(refreshToken).get)))
 		val req = request.RequestBody(Map(clientID -> bloggerData.get(clientID).get,
 			clientSecret -> bloggerData.get(clientSecret).get,
 			refreshToken -> bloggerData.get(refreshToken).get, "grant_type" -> "refresh_token"))
@@ -121,7 +121,30 @@ object BlogAPI {
 		saveData
 	}
 
-	def addPost(post:Post):Post = post
+	def addPost(post:Post):Exists = {
+		val client = new HttpClient
+		val url = new URL(s"https://www.googleapis.com/blogger/v3/blogs/${bloggerData(blogID)}/posts/")
+		val req = request.RequestBody(post.json(bloggerData(blogID)), header.MediaType.APPLICATION_JSON)
+		val resp = client.post(url, Some(req), authHeader)
+		if (resp.status.code == 401) {
+			updateAccessToken
+			addPost(post)
+		} else {
+			val json = Json.parse(resp.body.toString)
+			Exists(json.\("id").toString, json.\("url").toString, json.\("selfLink").toString)
+		}
+	}
+
+	def updatePost(post:Post):Unit = {
+		val client = new HttpClient
+		val url = new URL(s"https://www.googleapis.com/blogger/v3/blogs/${bloggerData(blogID)}/posts/${post.added.get.id}")
+		val req = request.RequestBody(post.json(bloggerData(blogID)), header.MediaType.APPLICATION_JSON)
+		val resp = client.put(url, req, authHeader)
+		if (resp.status.code == 401) {
+			updateAccessToken
+			updatePost(post)
+		}
+	}
 
 	def tokens = bloggerData
 }
