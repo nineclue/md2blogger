@@ -7,22 +7,24 @@ sealed abstract trait Differ
 case class Added(path:String) extends Differ
 case class Updated(path:String) extends Differ
 
+case class MDInfo(name:String, path:String, size:Long, mDate:Date, cs:Long, exists:Option[Exists])
+
 object Dir {
   import collection.JavaConversions.{asScalaIterator, asScalaBuffer}
 
   type Ignore = Path => Boolean
-  type DirInfo = collection.mutable.Map[String, (String, Long, Date)]
-  type DirInfoCS = collection.mutable.Map[String, (String, Long, Date, Long)]
+  type ScanInfo = collection.mutable.Map[String, (String, Long, Date)]
+  type DirInfo = collection.mutable.Map[String, MDInfo]
 
-  private val fileName = ".md_info"
+  private val fileName = ".mdInfo"
 
   // must be file, hidden or starts with '.' || '_' or extension is not ...
   implicit def defaultIgnore:Ignore =
     { f => {
         val fName = f.getFileName.toString
         val (name, ext) = splitFileName(fName)
-        !Files.isDirectory(f) && 
-        (Files.isHidden(f) || fName(0) == '.' || fName(0) == '_' || 
+        !Files.isDirectory(f) &&
+        (Files.isHidden(f) || fName(0) == '.' || fName(0) == '_' ||
           (ext != "md" && ext != "scala" && ext != "java"))
       }
     }
@@ -49,7 +51,7 @@ object Dir {
   // Path p에 대해 하부 디렉토리를 포함한 파일 정보를 반환
   // 상부와 하부 디렉토리에 위치한 파일간의 차이는 없음 (즉, 디렉토리는 분류의 편리함을 위한 것일뿐)
   // 같은 이름의 파일이 존재하면 에러 발생
-  def fileMap(m:DirInfo)(p:Path) = {
+  def fileMap(m:ScanInfo)(p:Path):ScanInfo = {
     val namePath = p.getFileName
     val name = namePath.toString
     val size = Files.size(p)
@@ -66,16 +68,16 @@ object Dir {
   }
 
 
-  // DirInfo m에 대해 각각의 pseudochecksum 계산해 DirInfoCS 반환
+  // DirInfo m에 대해 각각의 pseudochecksum 계산해 MDInfo 반환
   // 처음 mass update시 호출하고 이후 CS는 필요한 경우에만 계산하도록 하기 위함
   // 혹은 나중에 디렉토리를 처리하기 위함
-  def updateCS(m:DirInfo):DirInfoCS = {
-    val csMap = collection.mutable.Map.empty[String, (String, Long, Date, Long)]
+  def updateCS(m:ScanInfo):DirInfo = {
+    val mdMap = collection.mutable.Map.empty[String, MDInfo]
     m.foreach {
       case (name, (pathString, size, mTime)) =>
-        csMap += ((name, (pathString, size, mTime, pseudoCS(pathString))))
+        mdMap += ((name, MDInfo(name, pathString, size, mTime, pseudoCS(pathString), None)))
     }
-    csMap
+    mdMap
   }
 
   def apply(code: => Path=>Unit) = doDirJob(currentDir)(code)
@@ -98,29 +100,29 @@ object Dir {
   }
 
   // 자료 Map을 지정된 이름으로 저장
-  def saveToFile(name:String, m:DirInfoCS) = {
+  def saveToFile(name:String, m:DirInfo) = {
     import scala.pickling._
     import json._
 
     val file = Files.newBufferedWriter(Paths.get(name), java.nio.charset.Charset.forName("UTF-8"))
-    try 
+    try
       file.write(m.pickle.value)
     finally
       file.close
   }
 
   // 지정된 이름을 불러옴
-  def loadFromFile(name:String):DirInfoCS = {
+  def loadFromFile(name:String):DirInfo = {
     import scala.pickling._
     import json._
 
     val f = Paths.get(name)
     if (Files.exists(f)) {
       val jsonVal = new String(Files.readAllBytes(f))
-      jsonVal.unpickle[DirInfoCS]
-    } else 
-      collection.mutable.Map.empty[String, (String, Long, Date, Long)]
+      jsonVal.unpickle[DirInfo]
+    } else
+      collection.mutable.Map.empty[String, MDInfo]
   }
 
-  def updates(org:DirInfoCS, cur:DirInfo):(List[Differ], DirInfoCS) = ???
+  def updates(org:DirInfo, cur:ScanInfo):(List[Differ], DirInfo) = ???
 }
