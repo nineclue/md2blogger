@@ -6,18 +6,25 @@ import java.nio.file.Files
 
 object Md2Blogger {
   def main(args:Array[String]) {
-    /* if (args.isEmpty) throw new Exception("Missing file name")
-    val (name, ext) = Dir.splitFileName(args(0))
-    val fname = if (ext.size == 0) s"$name.md" else s"$name.$ext"
-    val file = java.nio.file.FileSystems.getDefault.getPath(fname)
-    if (!Files.exists(file)) throw new Exception(s"Cannot find ${file.toString}")
-    val htmlContent = markdown2html(io.Source.fromFile(file.toFile).mkString)
-    writeToFile(s"$name.html", htmlContent) */
-    // println(Dir.summary())
-    // Dir.printsummary
-    // println(Dir.loadFromFile(".mdinfo"))
-    BlogAPI.load
-    Dir.load
-    Dir.printUpdates(Dir.updates)
+    Dir.loadOrInit
+    val sArgs = args.map(_.toLowerCase)
+    if (args.size > 1 && (args(0) == "rm" || args(0) == "del")) {
+      val deletions = args.tail.filter(Dir.contains(_))
+      println("unmanaging files : " + deletions.mkString(", "))
+      Dir.removeFiles(deletions)
+    } else {
+      BlogAPI.loadOrInit
+      val updates = Dir.updates
+      Dir.printUpdates(updates)
+      if (updates.size > 0) {
+        var answer:String = ""
+        do {
+          print("Proceed to updates blogger (Y/n) : ")
+          answer = System.console.readLine.stripLineEnd.toLowerCase
+        } while (answer != "" && answer != "y" && answer != "n")
+        if (answer == "" || answer == "y")
+          BlogAPI.updatePosts(updates)
+      }
+    }
   }
 }

@@ -15,3 +15,20 @@ libraryDependencies ++= Seq(
 resolvers ++= Seq("Big Bee Consultants" at "http://repo.bigbeeconsultants.co.uk/repo",
 	"Typesafe Repo" at "http://repo.typesafe.com/typesafe/releases/",
   Resolver.sonatypeRepo("snapshots"))
+
+proguardSettings
+
+ProguardKeys.options in Proguard ++= Seq("-dontnote", "-dontwarn", "-ignorewarnings")
+
+ProguardKeys.options in Proguard += ProguardOptions.keepMain("nineclue.md2blogger.Md2Blogger")
+
+// ProguardKeys.merge in Proguard := true
+
+// ProguardKeys.mergeStrategies in Proguard ++= Seq(ProguardMerge.discard("META-INF/.*".r), ProguardMerge.discard("syntaxhighlight/SyntaxHighlighterPane*".r), ProguardMerge.discard("syntaxhighlight/JTextComponentRowHeader.class"))
+
+// ProguardKeys.inputFilter in Proguard := { file =>
+//   file.name match {
+//     case "scala-library.jar" => Some("!META-INFO/**")
+//     case _                   => None
+//   }
+// }

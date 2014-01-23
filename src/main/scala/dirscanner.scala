@@ -7,7 +7,9 @@ sealed abstract trait Differ
 case class Added(md:MDInfo) extends Differ
 case class Updated(md:MDInfo) extends Differ
 
-case class MDInfo(name:String, path:String, size:Long, mDate:Date, cs:Long, exists:Option[Exists])
+case class MDInfo(name:String, path:String, size:Long, mDate:Date, cs:Long, exists:Option[Stored]) {
+  def removeStored = MDInfo(name, path, size, mDate, cs, None)
+}
 
 object Dir {
   import collection.JavaConversions.{asScalaIterator, asScalaBuffer}
@@ -18,6 +20,7 @@ object Dir {
 
   private val fileName = ".mdInfo"
   private val dirInfo = collection.mutable.Map.empty[String, MDInfo]
+  def contains(fn:String) = dirInfo.contains(fn)
 
   // must be file, hidden or starts with '.' || '_' or extension is not ...
   implicit def defaultIgnore:Ignore =
@@ -90,7 +93,7 @@ object Dir {
   }
 
   // 지정된 이름을 불러옴
-  def load = {
+  def loadOrInit = {
     import scala.pickling._
     import json._
 
@@ -116,18 +119,18 @@ object Dir {
           val oInfo = dirInfo(fname)
           if ((oInfo.size != size) || (oInfo.mDate.compareTo(mDate) != 0)) {
             val cs = pseudoCS(fpath)
-            val updatedMD = MDInfo(fname, fpath, size, mDate, cs, dirInfo(fname).exists) 
-            if (cs != oInfo.cs)   // checksum is different, blogger updated needed
-              l += Updated(updatedMD)
+            val updatedMD = MDInfo(fname, fpath, size, mDate, cs, dirInfo(fname).exists)
             dirInfo.update(fname, updatedMD)
+            if (updatedMD.exists.nonEmpty && cs != oInfo.cs)   // checksum is different, blogger updated needed
+              l += Updated(updatedMD)
           }
         } else {
           val newMD = MDInfo(fname, fpath, size, mDate, pseudoCS(fpath), None)
-          l += Added(newMD)
           dirInfo.update(fname, newMD)
+          l += Added(newMD)
         }
     }
-    save
+    // save
     l.toList
   }
 
@@ -135,9 +138,19 @@ object Dir {
     println(s"${l.size} updates found.")
     l.foreach {
       case Added(mdInfo) =>
-        println(s"New file... $mdInfo")
+        println(s"New file... ${mdInfo.path}")
       case Updated(mdInfo) =>
-        println(s"Modified file... $mdInfo")
+        println(s"Modified file... ${mdInfo.path}")
     }
+  }
+
+  def updateMDInfo(mdi:MDInfo, stored:Stored) = {
+    dirInfo.update(mdi.name, MDInfo(mdi.name, mdi.path, mdi.size, mdi.mDate, mdi.cs, Some(stored)))
+    save
+  }
+
+  def removeFiles(files:Array[String]) = {
+    files.foreach(fn => dirInfo.update(fn, dirInfo(fn).removeStored))
+    save
   }
 }

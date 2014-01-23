@@ -99,7 +99,7 @@ object BlogAPI {
 		}
 	}
 
-	def load = {
+	def loadOrInit = {
 		val path = Paths.get(fileName).toAbsolutePath
 		if (Files.exists(path)) {
       val jsonVal = new String(Files.readAllBytes(path))
@@ -107,6 +107,16 @@ object BlogAPI {
 		} else {
 			initialize
 		}
+	}
+
+	def freshClient = {
+		print("checking blog... ")
+		val client = new HttpClient
+		val url = new URL(s"https://www.googleapis.com/blogger/v3/blogs/${bloggerData(blogID)}")
+		val resp = client.get(url, authHeader)
+		if (resp.status.code == 401) updateAccessToken
+		else { assert(resp.status.code == 200); println("ok, valid access token") }
+		client
 	}
 
 	def updateAccessToken = {
@@ -121,30 +131,31 @@ object BlogAPI {
 		saveData
 	}
 
-	def addPost(post:Post):Exists = {
-		val client = new HttpClient
+	def addPost(post:Post):Stored = {
+		val client = freshClient
 		val url = new URL(s"https://www.googleapis.com/blogger/v3/blogs/${bloggerData(blogID)}/posts/")
 		val req = request.RequestBody(post.json(bloggerData(blogID)), header.MediaType.APPLICATION_JSON)
 		val resp = client.post(url, Some(req), authHeader)
-		if (resp.status.code == 401) {
-			updateAccessToken
-			addPost(post)
-		} else {
-			val json = Json.parse(resp.body.toString)
-			Exists(json.\("id").toString, json.\("url").toString, json.\("selfLink").toString)
-		}
+		assert(resp.status.code == 200)
+		val json = Json.parse(resp.body.toString)
+		Stored(json.\("id").as[String], json.\("url").as[String], json.\("selfLink").as[String])
 	}
 
 	def updatePost(post:Post):Unit = {
-		val client = new HttpClient
+		val client = freshClient
 		val url = new URL(s"https://www.googleapis.com/blogger/v3/blogs/${bloggerData(blogID)}/posts/${post.added.get.id}")
 		val req = request.RequestBody(post.json(bloggerData(blogID)), header.MediaType.APPLICATION_JSON)
 		val resp = client.put(url, req, authHeader)
-		if (resp.status.code == 401) {
-			updateAccessToken
-			updatePost(post)
-		}
+		assert(resp.status.code == 200)
 	}
 
-	def tokens = bloggerData
+	def updatePosts(updates:List[Differ]) = {
+    updates.foreach {
+      case Added(mdi) =>
+        val stored = addPost(Post.toPost(mdi))
+        Dir.updateMDInfo(mdi, stored)
+      case Updated(mdi) =>
+        updatePost(Post.toPost(mdi))
+    }
+	}
 }
